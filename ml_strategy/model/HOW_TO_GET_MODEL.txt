@@ -1,18 +1,27 @@
-LightGBM Model (lgb_xauusd_multi_tf.txt)
-=========================================
+LightGBM Model – lgb_xauusd_multi_tf.txt (~5.3 MB)
+=====================================================
 
-The trained model file is ~5.3 MB.
+HOW TO ADD THE TRAINED MODEL (ca. 2 Minuten):
 
-Option A - From local package (recommended if you have the zip):
-  Copy lgb_xauusd_multi_tf.txt into this folder (ml_strategy/model/).
+1. Download from the chat:  lgb_xauusd_multi_tf.txt
 
-Option B - Re-train:
-  Use the same feature engineering in code/strategy_backtest.py
-  and train LightGBM on the data/ folder (train until end-2024,
-  validate on H1 2025).
+2. Open this page in the browser:
+   https://github.com/meffyou226-oss/Meffs/upload/main/ml_strategy/model
 
-Option C - Split parts:
-  If model_part_00 ... model_part_05 are present, run:
-    python reassemble_model.py
+3. Drag & drop the file lgb_xauusd_multi_tf.txt into the page
 
-The model expects the feature list in feat_cols.json.
+4. Commit message: "Add trained LightGBM model"
+
+5. Click "Commit changes"
+
+Danach ist alles komplett. Start:
+
+  cd ml_strategy
+  pip install -r requirements.txt
+  python code/strategy_backtest.py \
+    --m15_dir ../data/xauusd_m15 \
+    --h1_dir  ../data/xauusd_h1 \
+    --m5_dir  ../data/xauusd_m5 \
+    --lot 0.05
+
+Das Modell erwartet die Feature-Liste aus feat_cols.json.
