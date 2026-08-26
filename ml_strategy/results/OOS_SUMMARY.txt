@@ -1,0 +1,46 @@
+Meffs XAUUSD Multi-TF Model – Out-of-Sample Backtest Summary
+=============================================================
+Period: 2025-07-01 → 2026-08-26
+Lot size: 0.05
+Point value: $5 per $1 move
+Round-trip cost: $2.25 (spread 0.40 + slippage 0.05)
+
+Strategy A – Always trade (0.50 / 0.50), Hold 1 bar
+-------------------------------------------------
+Trades: 26,584
+Winrate: 65.7%
+Total PnL: $263,004.94
+Avg PnL/trade: $9.89
+Profit Factor: 2.56
+Max Drawdown: -$1,465.30
+
+Strategy B – Confidence 0.58 / 0.42, Hold 1 bar   ★ recommended
+-------------------------------------------------
+Trades: 21,087
+Winrate: 70.9%
+Total PnL: $267,224.33
+Avg PnL/trade: $12.67
+Profit Factor: 3.45
+Max Drawdown: -$1,010.46
+
+Strategy C – Confidence 0.62 / 0.38, Hold 2 bars
+-------------------------------------------------
+Trades: 11,143
+Winrate: 76.3%
+Total PnL: $248,423.54
+Avg PnL/trade: $22.29
+Profit Factor: 5.11
+Max Drawdown: -$1,534.88
+
+Strategy D – High Confidence 0.65 / 0.35, Hold 1 bar
+-------------------------------------------------
+Trades: 16,661
+Winrate: 75.5%
+Total PnL: $256,976.47
+Avg PnL/trade: $15.42
+Profit Factor: 4.65
+Max Drawdown: -$1,196.24
+
+Raw direction accuracy @ threshold 0.5: 70.97%
+
+All months in the OOS window were positive under the stated cost assumptions.
