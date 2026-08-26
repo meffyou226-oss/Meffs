@@ -7,7 +7,7 @@ Meffs XAUUSD Multi-Timeframe Strategy
 - OOS period used in development: 2025-07-01 → 2026-08-26
 
 Requirements:
-    pip install lightgbm pandas numpy ta scikit-learn
+    pip install lightgbm pandas numpy ta scikit-learn joblib
 
 Usage:
     python strategy_backtest.py --m15_dir ../data/xauusd_m15 --h1_dir ../data/xauusd_h1 --m5_dir ../data/xauusd_m5 --lot 0.05
@@ -226,12 +226,22 @@ def main():
     parser.add_argument("--out", type=str, default="trades_out.csv", help="Output trades CSV")
     args = parser.parse_args()
 
-    if not MODEL_PATH.exists():
-        raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
-
-    model = lgb.Booster(model_file=str(MODEL_PATH))
-    with open(FEAT_PATH) as f:
-        feat_cols = json.load(f)
+    PKL_PATH = ROOT / "model" / "lgb_xauusd_multi_tf.pkl"
+    if PKL_PATH.exists():
+        import joblib
+        d = joblib.load(PKL_PATH)
+        model = d["model"]
+        feat_cols = d["feat_cols"]
+        print("Loaded model from .pkl")
+    elif MODEL_PATH.exists():
+        model = lgb.Booster(model_file=str(MODEL_PATH))
+        with open(FEAT_PATH) as f:
+            feat_cols = json.load(f)
+        print("Loaded model from .txt")
+    else:
+        raise FileNotFoundError(
+            f"Model not found. Place lgb_xauusd_multi_tf.pkl or .txt in {ROOT / 'model'}"
+        )
 
     if not args.m15_dir:
         print("No --m15_dir given. Please provide your data folders.")
