@@ -1,27 +1,32 @@
-LightGBM Model – lgb_xauusd_multi_tf.txt (~5.3 MB)
-=====================================================
+Trained Model – empfohlene Datei fuer das Repo
+================================================
 
-HOW TO ADD THE TRAINED MODEL (ca. 2 Minuten):
+EMPFOHLEN:  lgb_xauusd_multi_tf.pkl  (~2.5 MB, joblib, komprimiert)
+Alternative: lgb_xauusd_multi_tf.txt (~5.3 MB, natives LightGBM)
 
-1. Download from the chat:  lgb_xauusd_multi_tf.txt
+Upload (2 Minuten):
 
-2. Open this page in the browser:
+1. Datei aus dem Chat herunterladen: lgb_xauusd_multi_tf.pkl
+
+2. Browser oeffnen:
    https://github.com/meffyou226-oss/Meffs/upload/main/ml_strategy/model
 
-3. Drag & drop the file lgb_xauusd_multi_tf.txt into the page
+3. Datei per Drag & Drop ablegen
 
-4. Commit message: "Add trained LightGBM model"
+4. Commit: "Add trained LightGBM model (pkl)"
 
-5. Click "Commit changes"
+5. Commit changes klicken
 
-Danach ist alles komplett. Start:
+Laden im Code:
 
+  import joblib
+  d = joblib.load("ml_strategy/model/lgb_xauusd_multi_tf.pkl")
+  model = d["model"]
+  feat_cols = d["feat_cols"]
+
+Oder: python model/load_example.py
+
+Backtest:
   cd ml_strategy
-  pip install -r requirements.txt
-  python code/strategy_backtest.py \
-    --m15_dir ../data/xauusd_m15 \
-    --h1_dir  ../data/xauusd_h1 \
-    --m5_dir  ../data/xauusd_m5 \
-    --lot 0.05
-
-Das Modell erwartet die Feature-Liste aus feat_cols.json.
+  pip install -r requirements.txt joblib
+  python code/strategy_backtest.py --m15_dir ../data/xauusd_m15 --h1_dir ../data/xauusd_h1 --m5_dir ../data/xauusd_m5 --lot 0.05
