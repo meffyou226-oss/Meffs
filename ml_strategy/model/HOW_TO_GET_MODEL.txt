@@ -1,0 +1,18 @@
+LightGBM Model (lgb_xauusd_multi_tf.txt)
+=========================================
+
+The trained model file is ~5.3 MB.
+
+Option A - From local package (recommended if you have the zip):
+  Copy lgb_xauusd_multi_tf.txt into this folder (ml_strategy/model/).
+
+Option B - Re-train:
+  Use the same feature engineering in code/strategy_backtest.py
+  and train LightGBM on the data/ folder (train until end-2024,
+  validate on H1 2025).
+
+Option C - Split parts:
+  If model_part_00 ... model_part_05 are present, run:
+    python reassemble_model.py
+
+The model expects the feature list in feat_cols.json.
