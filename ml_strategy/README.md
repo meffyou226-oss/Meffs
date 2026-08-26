@@ -15,21 +15,41 @@ ml_strategy/
 ├── README.md
 ├── requirements.txt
 ├── model/
-│   ├── lgb_xauusd_multi_tf.txt   # Trained LightGBM model (push separately if large)
-│   └── feat_cols.json
+│   ├── lgb_xauusd_multi_tf.pkl   # preferred (joblib)
+│   ├── lgb_xauusd_multi_tf.txt   # native LightGBM
+│   ├── feat_cols.json
+│   └── HOW_TO_GET_MODEL.txt
 ├── results/
 │   └── OOS_SUMMARY.txt
 └── code/
-    └── strategy_backtest.py
+    ├── train_model.py           # Training
+    └── strategy_backtest.py     # Backtest / signals
 ```
 
 ---
 
-## Quick Start
+## Train (retrain on your data)
 
 ```bash
-pip install -r requirements.txt
+cd ml_strategy
+pip install -r requirements.txt joblib
 
+python code/train_model.py \
+  --m15_dir ../data/xauusd_m15 \
+  --h1_dir  ../data/xauusd_h1 \
+  --m5_dir  ../data/xauusd_m5 \
+  --out_dir model
+```
+
+Writes `model/lgb_xauusd_multi_tf.txt`, `.pkl` and `feat_cols.json`.
+
+Default split: train < 2025-01-01, val < 2025-07-01, rest = OOS test.
+
+---
+
+## Backtest / signals
+
+```bash
 python code/strategy_backtest.py \
   --m15_dir ../data/xauusd_m15 \
   --h1_dir  ../data/xauusd_h1 \
@@ -41,7 +61,9 @@ python code/strategy_backtest.py \
   --out my_trades.csv
 ```
 
-CSV format: `timestamp,open,high,low,close` (timestamp = Unix ms).
+CSV format: `timestamp,open,high,low,close` (Unix ms).
+
+Place `lgb_xauusd_multi_tf.pkl` (or `.txt`) in `model/` first — see `model/HOW_TO_GET_MODEL.txt`.
 
 ---
 
