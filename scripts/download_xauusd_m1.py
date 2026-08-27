@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""Download Dukascopy XAUUSD M1 BID candles as monthly CSVs.
-
-Format matches data/xauusd_m5: timestamp,open,high,low,close (Unix ms).
-"""
+"""Download Dukascopy XAUUSD M1 BID candles as monthly CSVs."""
 from __future__ import annotations
 
 import argparse
 import calendar
 import lzma
+import random
 import struct
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -15,17 +13,26 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 POINT = 1000.0
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/126.0.0.0 Safari/537.36"
-    ),
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36",
     "Accept": "*/*",
+    "Accept-Encoding": "identity",
     "Referer": "https://www.dukascopy.com/",
+    "Connection": "keep-alive",
 }
+
+
+def make_session() -> requests.Session:
+    s = requests.Session()
+    s.headers.update(HEADERS)
+    retry = Retry(total=0, connect=2, read=2, backoff_factor=0.2, status_forcelist=[])
+    adapter = HTTPAdapter(pool_connections=16, pool_maxsize=16, max_retries=retry)
+    s.mount("https://", adapter)
+    return s
 
 
 def month_days(year: int, month: int):
@@ -38,21 +45,26 @@ def month_days(year: int, month: int):
         yield d
 
 
-def fetch_day(year: int, month: int, day: int, retries: int = 6):
+def fetch_day(session: requests.Session, year: int, month: int, day: int, retries: int = 8):
     url = (
         f"https://datafeed.dukascopy.com/datafeed/XAUUSD/"
         f"{year}/{month-1:02d}/{day:02d}/BID_candles_min_1.bi5"
     )
-    headers = dict(HEADERS)
-    delay = 1.0
+    delay = 0.25
     for _ in range(retries):
         try:
-            r = requests.get(url, headers=headers, timeout=30)
+            r = session.get(url, timeout=20)
             if r.status_code == 404:
                 return day, []
+            if r.status_code == 429:
+                ra = r.headers.get("Retry-After")
+                wait = float(ra) if ra and ra.isdigit() else delay + random.random()
+                time.sleep(min(wait, 8))
+                delay = min(delay * 1.6, 8)
+                continue
             if r.status_code != 200 or not r.content:
                 time.sleep(delay)
-                delay = min(delay * 2, 20)
+                delay = min(delay * 1.6, 8)
                 continue
             raw = lzma.decompress(r.content)
             base = datetime(year, month, day, tzinfo=timezone.utc)
@@ -63,12 +75,12 @@ def fetch_day(year: int, month: int, day: int, retries: int = 6):
                 rows.append((ts, o / POINT, h / POINT, lo / POINT, c / POINT))
             return day, rows
         except Exception:
-            time.sleep(delay)
-            delay = min(delay * 2, 20)
+            time.sleep(delay + random.random() * 0.2)
+            delay = min(delay * 1.6, 8)
     return day, None
 
 
-def download_month(out_dir: Path, year: int, month: int) -> Path | None:
+def download_month(out_dir: Path, session: requests.Session, year: int, month: int, day_workers: int) -> Path | None:
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / f"XAUUSD_M1_{year}_{month:02d}.csv"
     days = list(month_days(year, month))
@@ -77,10 +89,11 @@ def download_month(out_dir: Path, year: int, month: int) -> Path | None:
     if out.exists() and out.stat().st_size > 1000:
         print(f"skip {out.name}", flush=True)
         return out
+    t0 = time.time()
     all_rows = []
     failed = []
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        futs = [ex.submit(fetch_day, year, month, d) for d in days]
+    with ThreadPoolExecutor(max_workers=day_workers) as ex:
+        futs = [ex.submit(fetch_day, session, year, month, d) for d in days]
         for fut in as_completed(futs):
             day, rows = fut.result()
             if rows is None:
@@ -88,7 +101,7 @@ def download_month(out_dir: Path, year: int, month: int) -> Path | None:
             elif rows:
                 all_rows.extend(rows)
     for d in failed:
-        day, rows = fetch_day(year, month, d, retries=10)
+        day, rows = fetch_day(session, year, month, d, retries=12)
         if rows:
             all_rows.extend(rows)
         else:
@@ -98,7 +111,7 @@ def download_month(out_dir: Path, year: int, month: int) -> Path | None:
         f.write("timestamp,open,high,low,close\n")
         for ts, o, h, lo, c in all_rows:
             f.write(f"{ts},{o:.3f},{h:.3f},{lo:.3f},{c:.3f}\n")
-    print(f"wrote {out.name} rows={len(all_rows)} bytes={out.stat().st_size}", flush=True)
+    print(f"wrote {out.name} rows={len(all_rows)} sec={time.time()-t0:.1f}", flush=True)
     return out
 
 
@@ -109,33 +122,34 @@ def month_range(start: str, end: str):
     out = []
     while (y, m) <= (ey, em):
         out.append((y, m))
-        if m == 12:
-            y, m = y + 1, 1
-        else:
-            m += 1
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
     return out
 
 
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--out", default="data/xauusd_m1")
-    p.add_argument("--start", default="2022-01", help="YYYY-MM")
-    p.add_argument("--end", default=None, help="YYYY-MM inclusive")
-    p.add_argument("--jobs", type=int, default=6, help="parallel months")
+    p.add_argument("--start", default="2022-01")
+    p.add_argument("--end", default=None)
+    p.add_argument("--jobs", type=int, default=2, help="parallel months")
+    p.add_argument("--day-workers", type=int, default=6)
     args = p.parse_args()
     now = datetime.now(timezone.utc)
     end = args.end or f"{now.year}-{now.month:02d}"
     months = month_range(args.start, end)
     out_dir = Path(args.out)
+    session = make_session()
     jobs = max(1, args.jobs)
-    print(f"months={len(months)} jobs={jobs}", flush=True)
+    print(f"months={len(months)} month_jobs={jobs} day_workers={args.day_workers}", flush=True)
     if jobs == 1:
         for y, m in months:
-            print(f"=== {y}-{m:02d} ===", flush=True)
-            download_month(out_dir, y, m)
+            download_month(out_dir, session, y, m, args.day_workers)
         return
     with ThreadPoolExecutor(max_workers=jobs) as ex:
-        futs = {ex.submit(download_month, out_dir, y, m): (y, m) for y, m in months}
+        futs = {
+            ex.submit(download_month, out_dir, session, y, m, args.day_workers): (y, m)
+            for y, m in months
+        }
         for fut in as_completed(futs):
             y, m = futs[fut]
             try:
