@@ -1,0 +1,44 @@
+name: Download XAUUSD M1
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: Start month YYYY-MM
+        required: true
+        default: "2022-01"
+      end:
+        description: End month YYYY-MM (empty = current)
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: Download M1 data
+        run: |
+          END_ARG=""
+          if [ -n "${{ inputs.end }}" ]; then
+            END_ARG="--end ${{ inputs.end }}"
+          fi
+          python scripts/download_xauusd_m1.py --out data/xauusd_m1 --start "${{ inputs.start }}" $END_ARG
+      - name: Commit data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/xauusd_m1
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Add/update XAUUSD M1 monthly CSVs from Dukascopy"
+            git push
+          fi

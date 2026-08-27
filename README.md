@@ -5,11 +5,26 @@ XAUUSD multi-timeframe data + ML strategy package.
 ## Data
 
 OHLCV CSVs under `data/`:
+- `xauusd_m1/`
 - `xauusd_m5/`
 - `xauusd_m15/`
 - `xauusd_h1/`
 
 Format: `timestamp,open,high,low,close` (Unix ms).
+
+### XAUUSD M1 (Dukascopy)
+
+Monatliche Dateien: `data/xauusd_m1/XAUUSD_M1_YYYY_MM.csv`
+
+Lokal herunterladen:
+
+```bash
+pip install requests
+python scripts/download_xauusd_m1.py --out data/xauusd_m1 --start 2022-01
+```
+
+Oder GitHub Action **Download XAUUSD M1** (Actions → Run workflow) starten.
+Quelle: Dukascopy BID `candles_min_1` (`datafeed.dukascopy.com`).
 
 ## ML Strategy
 
