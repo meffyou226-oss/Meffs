@@ -46,4 +46,16 @@ python code/strategy_backtest.py \
   --lot 0.05
 ```
 
+## Zone strategy (Demand / Supply)
+
+Look-ahead-free port of the TradingView `XAU Zone Pro` setup plus a LightGBM filter.
+See `ml_strategy/ZONE_STRATEGY.md`.
+
+```bash
+cd ml_strategy/code
+python zone_backtest.py --tf m15
+python train_zone_filter.py --tf m15 --train-end 2025-06-30 --val-end 2025-12-31
+python zone_filter_backtest.py --tf m15 --threshold 0.74 --oos-start 2026-01-01
+```
+
 **Disclaimer:** Research only. Not financial advice. Paper-trade first.
