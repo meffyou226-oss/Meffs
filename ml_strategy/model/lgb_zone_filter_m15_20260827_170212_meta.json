@@ -1,0 +1,16 @@
+{
+  "tf": "m15",
+  "train_end": "2025-06-30",
+  "val_end": "2025-12-31",
+  "best_iteration": 48,
+  "test_auc": 0.675,
+  "test_at_val_threshold": {
+    "threshold": 0.74,
+    "n": 130,
+    "n_all": 575,
+    "winrate": 0.8538,
+    "expectancy_R": 1.269,
+    "baseline_winrate": 0.6226,
+    "baseline_expectancy_R": 0.598
+  }
+}
