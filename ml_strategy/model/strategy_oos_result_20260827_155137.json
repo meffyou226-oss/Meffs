@@ -1,0 +1,44 @@
+{
+  "oos": {
+    "pf": 1850.3483146062292,
+    "winrate": 0.9999332086561582,
+    "trades": 14972,
+    "total_pnl": 3291.839999999088,
+    "gross_profit": 3293.619999999088,
+    "gross_loss": 1.78
+  },
+  "best_val": {
+    "pf": 910.0337078652628,
+    "winrate": 0.9998642042368278,
+    "trades": 7364,
+    "total_pnl": 1618.080000000168,
+    "gross_profit": 1619.860000000168,
+    "gross_loss": 1.78,
+    "tp": 20,
+    "sl": 20,
+    "thr": 0.5,
+    "score": 0.9999321021184139
+  },
+  "params": {
+    "tp_points": 20,
+    "sl_points": 20,
+    "long_threshold": 0.5,
+    "short_threshold": 0.5
+  },
+  "costs": {
+    "point_value": 0.05,
+    "spread_points": 10,
+    "spread_cost": 0.5,
+    "commission": 0.28,
+    "cost_per_trade": 0.78,
+    "lots": 0.05
+  },
+  "split": {
+    "train_end": 0.75,
+    "val_end": 0.85,
+    "train_samples": 147918,
+    "val_samples": 19723,
+    "test_samples": 29584
+  },
+  "trained_at": "20260827_155137"
+}
