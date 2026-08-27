@@ -6,15 +6,11 @@ on:
       start:
         description: Start month YYYY-MM
         required: true
-        default: "2022-01"
+        default: "2023-01"
       end:
         description: End month YYYY-MM
         required: true
         default: "2026-08"
-      jobs:
-        description: Parallel month downloads
-        required: true
-        default: "8"
 
 concurrency:
   group: xauusd-m1-upload
@@ -32,35 +28,47 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install requests
-      - name: Download months in parallel
-        run: |
-          python scripts/download_xauusd_m1.py \
-            --out data/xauusd_m1 \
-            --start "${{ inputs.start }}" \
-            --end "${{ inputs.end }}" \
-            --jobs "${{ inputs.jobs }}"
-      - name: Commit each month separately
+      - name: Download and push month by month
+        env:
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main || true
-          shopt -s nullglob
-          for f in data/xauusd_m1/XAUUSD_M1_*.csv; do
-            git add "$f"
+
+          python3 - <<'PY'
+          import os
+          start, end = os.environ["START"], os.environ["END"]
+          sy, sm = map(int, start.split("-"))
+          ey, em = map(int, end.split("-"))
+          y, m = sy, sm
+          months = []
+          while (y, m) <= (ey, em):
+              months.append(f"{y}-{m:02d}")
+              y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+          open("/tmp/months.txt", "w").write("\n".join(months) + "\n")
+          print("months", len(months))
+          PY
+
+          while read -r YM; do
+            [ -z "$YM" ] && continue
+            echo "======== $YM ========"
+            python scripts/download_xauusd_m1.py --out data/xauusd_m1 --start "$YM" --end "$YM" --jobs 1
+            f="data/xauusd_m1/XAUUSD_M1_${YM/-/_}.csv"
+            git add "$f" || true
             if git diff --cached --quiet; then
+              echo "no change $YM"
               continue
             fi
-            base=$(basename "$f" .csv)
-            git commit -m "Add ${base} from Dukascopy"
-            echo "committed $base"
-          done
-          for i in 1 2 3 4 5; do
-            git pull --rebase origin main || true
-            if git push origin HEAD:main; then
-              echo pushed
-              exit 0
-            fi
-            sleep $((i * 3))
-          done
-          git push origin HEAD:main
+            git commit -m "Add XAUUSD M1 $YM from Dukascopy"
+            for i in 1 2 3 4 5; do
+              git pull --rebase origin main || true
+              if git push origin HEAD:main; then
+                echo "pushed $YM"
+                break
+              fi
+              echo "push retry $i"
+              sleep $((i * 2))
+            done
+          done < /tmp/months.txt
