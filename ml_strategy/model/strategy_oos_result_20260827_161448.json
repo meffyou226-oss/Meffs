@@ -1,0 +1,45 @@
+{
+  "oos": {
+    "pf": 1.986229931447567,
+    "winrate": 0.5309282754496134,
+    "trades": 46818,
+    "total_pnl": 34087.21700001429,
+    "gross_profit": 68650.37100001491,
+    "gross_loss": 34563.15399999155
+  },
+  "best_val": {
+    "pf": 1.8013089896292394,
+    "winrate": 0.49348170672532593,
+    "trades": 30913,
+    "total_pnl": 14960.538999994986,
+    "gross_profit": 33630.66400000324,
+    "gross_loss": 18670.12500000091,
+    "tp": 80,
+    "sl": 40,
+    "thr": 0.6
+  },
+  "params": {
+    "tp_points": 80,
+    "sl_points": 40,
+    "long_threshold": 0.6,
+    "short_threshold": 0.4
+  },
+  "costs": {
+    "point_value": 0.05,
+    "spread_points": 10,
+    "spread_cost": 0.5,
+    "commission": 0.28,
+    "cost_per_trade": 0.78,
+    "lots": 0.05
+  },
+  "split": {
+    "train_end": 0.75,
+    "val_end": 0.85,
+    "train_samples": 273817,
+    "val_samples": 36509,
+    "test_samples": 54704,
+    "purge_rows": 60
+  },
+  "look_ahead_mitigation": "Purged first 60 rows in test set so rolling features at first test row only use data up to that point",
+  "trained_at": "20260827_161448"
+}

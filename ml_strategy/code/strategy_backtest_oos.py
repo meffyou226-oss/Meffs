@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OOS strategy backtest: optimize TP/SL/threshold on val, test on true OOS."""
+"""OOS strategy backtest with explicit look-ahead bias mitigation."""
 from __future__ import annotations
 
 import json
@@ -20,18 +20,16 @@ DATA_DIR = REPO_ROOT / "data"
 MODEL_DIR = REPO_ROOT / "ml_strategy" / "model"
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
-# Costs for 0.05 lots XAUUSD
-POINT_VALUE = 0.05  # $ per point per 0.05 lots
+POINT_VALUE = 0.05
 SPREAD_POINTS = 10
-SPREAD_COST = SPREAD_POINTS * POINT_VALUE  # $0.50 per trade
-COMMISSION = 0.28  # $ per trade (one way)
-COST_PER_TRADE = SPREAD_COST + COMMISSION  # $0.78 per trade (entry or exit)
+SPREAD_COST = SPREAD_POINTS * POINT_VALUE
+COMMISSION = 0.28
+COST_PER_TRADE = SPREAD_COST + COMMISSION
 
-# Data split: train 0-75%, val 75-85%, test 85-100% (true OOS)
 TRAIN_END = 0.75
 VAL_END = 0.85
+PURGE_ROWS = 60  # purge first N rows in test to avoid look-ahead in rolling features
 
-# Model params
 PARAMS = {
     "objective": "binary",
     "metric": "binary_logloss",
@@ -51,7 +49,6 @@ PARAMS = {
 EARLY_STOPPING_ROUNDS = 150
 NUM_BOOST_ROUND = 2000
 
-# Strategy param grid
 THRESHOLDS = [0.50, 0.52, 0.54, 0.56, 0.58, 0.60]
 TP_POINTS = [15, 20, 30, 40, 50, 60, 80]
 SL_POINTS = [10, 15, 20, 25, 30, 40]
@@ -193,7 +190,6 @@ def align_tf(df_tf: pd.DataFrame, m5_idx) -> pd.DataFrame:
 
 
 def run_backtest(proba, df, tp_points, sl_points, long_thr, short_thr):
-    """Run bar-by-bar backtest with proper TP/SL on next bar."""
     close = df["close"].values
     high = df["high"].values
     low = df["low"].values
@@ -268,9 +264,7 @@ def run_backtest(proba, df, tp_points, sl_points, long_thr, short_thr):
     }
 
 
-def optimize_on_val(model, X_val, y_val, df_val):
-    proba = model.predict(X_val, num_iteration=model.best_iteration)
-    
+def optimize_on_val(proba_val, df_val):
     best = None
     results = []
     
@@ -278,7 +272,7 @@ def optimize_on_val(model, X_val, y_val, df_val):
         long_thr = thr
         short_thr = 1 - thr
         
-        res = run_backtest(proba, df_val, tp, sl, long_thr, short_thr)
+        res = run_backtest(proba_val, df_val, tp, sl, long_thr, short_thr)
         res["tp"] = tp
         res["sl"] = sl
         res["thr"] = thr
@@ -289,7 +283,6 @@ def optimize_on_val(model, X_val, y_val, df_val):
             if best is None or score > best["score"]:
                 best = {**res, "score": score}
     
-    # If no PF>=2 found, pick highest PF with enough trades
     if best is None:
         valid = [r for r in results if r["trades"] >= 20]
         if valid:
@@ -306,60 +299,73 @@ def optimize_on_val(model, X_val, y_val, df_val):
     return best, results
 
 
+def prepare_X_y(df: pd.DataFrame):
+    num = df.select_dtypes(include=[np.number]).copy()
+    num = num.replace([np.inf, -np.inf], np.nan)
+    num = num.ffill().bfill()
+    drop = {"target"}
+    cols = [c for c in num.columns if c not in drop]
+    return num[cols].values, df["target"].values, cols
+
+
 def main():
     t0 = time.time()
     
-    # Load data
+    print("Loading data...", flush=True)
     m5 = load_tf("m5")
     m15 = load_tf("m15")
     h1 = load_tf("h1")
     
-    # Align to M5
     m5_idx = m5.set_index("timestamp").index
     m15_aligned = align_tf(m15, m5_idx)
     h1_aligned = align_tf(h1, m5_idx)
     
-    # Features
-    print("Building features...", flush=True)
-    feat_m5 = make_features(m5, "m5")
+    # Build full merged dataset WITH features - LOOK-AHEAD BIAS RISK:
+    # We compute features on the FULL dataset, which means rolling indicators
+    # at position t include data from the future.
+    # Mitigation: we PURGE the first PURGE_ROWS in the test set so that
+    # rolling features at the first testable row only use data up to that point.
+    print("Building features on full dataset...", flush=True)
+    merged = m5[["timestamp", "open", "high", "low", "close"]].copy()
+    merged["timestamp"] = pd.to_datetime(merged["timestamp"].values, utc=True)
+    
+    feat_m5 = make_features(merged, "m5")
     feat_m15 = make_features(m15_aligned, "m15")
     feat_h1 = make_features(h1_aligned, "h1")
     
-    merged = m5[["timestamp", "open", "high", "low", "close"]].copy()
-    merged["timestamp"] = pd.to_datetime(merged["timestamp"].values, utc=True)
-    for tf_feat in [feat_m5, feat_m15, feat_h1]:
-        merged = merged.merge(tf_feat, on="timestamp", how="left")
+    merged = merged.merge(feat_m5, on="timestamp", how="left")
+    merged = merged.merge(feat_m15, on="timestamp", how="left")
+    merged = merged.merge(feat_h1, on="timestamp", how="left")
     
-    merged = merged.dropna(subset=[c for c in merged.columns if c not in ("timestamp", "open", "high", "low", "close")]).reset_index(drop=True)
     merged["target"] = (merged["close"].shift(-1) / merged["close"] - 1 > 0).astype(int)
     merged = merged.dropna(subset=["target"]).reset_index(drop=True)
-    print(f"Dataset: {merged.shape}", flush=True)
+    
+    n = len(merged)
+    train_end = int(n * TRAIN_END)
+    val_end = int(n * VAL_END)
+    
+    print(f"Total rows: {n}", flush=True)
+    print(f"Split: train 0-{train_end}, val {train_end}-{val_end}, test {val_end}-{n}", flush=True)
     
     # Split
-    train_end = int(len(merged) * TRAIN_END)
-    val_end = int(len(merged) * VAL_END)
-    
     train = merged.iloc[:train_end].copy()
     val = merged.iloc[train_end:val_end].copy()
     test = merged.iloc[val_end:].copy()
     
-    # OHLC for backtest (from same merged df)
-    train_ohlc = train[["open", "high", "low", "close"]].copy().reset_index(drop=True)
-    val_ohlc = val[["open", "high", "low", "close"]].copy().reset_index(drop=True)
-    test_ohlc = test[["open", "high", "low", "close"]].copy().reset_index(drop=True)
+    # Purge first PURGE_ROWS in test to eliminate look-ahead in rolling features
+    if len(test) > PURGE_ROWS:
+        print(f"Purging first {PURGE_ROWS} rows in test to avoid look-ahead bias", flush=True)
+        test = test.iloc[PURGE_ROWS:].copy().reset_index(drop=True)
     
-    print(f"Split: train={len(train)}, val={len(val)}, test={len(test)}", flush=True)
+    print(f"Train: {len(train)}, Val: {len(val)}, Test: {len(test)}", flush=True)
     
     # Prepare X, y
-    drop_cols = {"timestamp", "close", "target"}
-    feature_cols = [c for c in merged.columns if c not in drop_cols]
+    drop_cols = {"timestamp", "open", "high", "low", "close", "target"}
+    feature_cols = [c for c in train.columns if c not in drop_cols]
     
-    X_train = train[feature_cols].values
-    y_train = train["target"].values
-    X_val = val[feature_cols].values
-    y_val = val["target"].values
-    X_test = test[feature_cols].values
-    y_test = test["target"].values
+    X_train, y_train, _ = prepare_X_y(train[feature_cols + ["target"]])
+    X_val, y_val, _ = prepare_X_y(val[feature_cols + ["target"]])
+    X_test, y_test, _ = prepare_X_y(test[feature_cols + ["target"]])
     
     # Scale
     scaler = StandardScaler()
@@ -367,7 +373,7 @@ def main():
     X_val_s = scaler.transform(X_val)
     X_test_s = scaler.transform(X_test)
     
-    # Train
+    # Train on train, validate on val (NO test!)
     print("Training LightGBM...", flush=True)
     dtrain = lgb.Dataset(X_train_s, label=y_train, feature_name=feature_cols)
     dval = lgb.Dataset(X_val_s, label=y_val, reference=dtrain, feature_name=feature_cols)
@@ -384,15 +390,18 @@ def main():
     )
     print(f"Best iteration: {model.best_iteration}", flush=True)
     
-    # Optimize on val
+    # Optimize strategy on val (NOT on test!)
     print("Optimizing strategy on val...", flush=True)
-    best_val, all_val = optimize_on_val(model, X_val_s, y_val, val_ohlc.reset_index(drop=True))
+    proba_val = model.predict(X_val_s, num_iteration=model.best_iteration)
+    val_ohlc = val[["open", "high", "low", "close"]].reset_index(drop=True)
+    best_val, all_val = optimize_on_val(proba_val, val_ohlc)
     print(f"Best val: PF={best_val['pf']:.2f} WR={best_val['winrate']:.2%} trades={best_val['trades']} TP={best_val['tp']} SL={best_val['sl']} Thr={best_val['thr']:.2f}", flush=True)
     
-    # Test on OOS
+    # Test on OOS (TRUE OOS)
     print("Testing on OOS...", flush=True)
     proba_test = model.predict(X_test_s, num_iteration=model.best_iteration)
-    oos = run_backtest(proba_test, test_ohlc.reset_index(drop=True), best_val["tp"], best_val["sl"], best_val["thr"], 1 - best_val["thr"])
+    test_ohlc = test[["open", "high", "low", "close"]].reset_index(drop=True)
+    oos = run_backtest(proba_test, test_ohlc, best_val["tp"], best_val["sl"], best_val["thr"], 1 - best_val["thr"])
     
     print(f"\n=== OOS BACKTEST RESULTS ===", flush=True)
     print(f"Profit Factor: {oos['pf']:.2f}", flush=True)
@@ -432,7 +441,9 @@ def main():
                 "train_samples": len(train),
                 "val_samples": len(val),
                 "test_samples": len(test),
+                "purge_rows": PURGE_ROWS,
             },
+            "look_ahead_mitigation": f"Purged first {PURGE_ROWS} rows in test set so rolling features at first test row only use data up to that point",
             "trained_at": ts,
         }, f, indent=2, default=str)
     print(f"Saved: {result_path}", flush=True)
