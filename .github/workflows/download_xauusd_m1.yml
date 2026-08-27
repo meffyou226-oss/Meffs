@@ -8,9 +8,13 @@ on:
         required: true
         default: "2022-01"
       end:
-        description: End month YYYY-MM (empty = current)
-        required: false
-        default: ""
+        description: End month YYYY-MM
+        required: true
+        default: "2026-08"
+
+concurrency:
+  group: xauusd-m1-upload
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -24,21 +28,52 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install requests
-      - name: Download M1 data
+      - name: Download and commit each month
+        env:
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
         run: |
-          END_ARG=""
-          if [ -n "${{ inputs.end }}" ]; then
-            END_ARG="--end ${{ inputs.end }}"
-          fi
-          python scripts/download_xauusd_m1.py --out data/xauusd_m1 --start "${{ inputs.start }}" $END_ARG
-      - name: Commit data
-        run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/xauusd_m1
-          if git diff --cached --quiet; then
-            echo "No changes"
-          else
-            git commit -m "Add/update XAUUSD M1 monthly CSVs from Dukascopy"
-            git push
-          fi
+
+          python3 - <<'PY'
+          import os, subprocess
+          from datetime import datetime
+
+          start = os.environ["START"]
+          end = os.environ["END"]
+          sy, sm = map(int, start.split("-"))
+          ey, em = map(int, end.split("-"))
+          y, m = sy, sm
+          months = []
+          while (y, m) <= (ey, em):
+              months.append(f"{y}-{m:02d}")
+              if m == 12:
+                  y, m = y + 1, 1
+              else:
+                  m += 1
+          open("/tmp/months.txt", "w").write("\n".join(months) + "\n")
+          print(f"months={len(months)}")
+          PY
+
+          while read -r YM; do
+            [ -z "$YM" ] && continue
+            echo "======== $YM ========"
+            python scripts/download_xauusd_m1.py --out data/xauusd_m1 --start "$YM" --end "$YM"
+            git add "data/xauusd_m1"
+            if git diff --cached --quiet; then
+              echo "no change $YM"
+              continue
+            fi
+            git commit -m "Add XAUUSD M1 $YM from Dukascopy"
+            for i in 1 2 3 4 5; do
+              git pull --rebase origin main || true
+              if git push origin HEAD:main; then
+                echo "pushed $YM"
+                break
+              fi
+              echo "push retry $i"
+              sleep $((i * 3))
+            done
+          done < /tmp/months.txt
