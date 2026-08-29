@@ -5,7 +5,7 @@ out=xauusd_macro_gold_pit_daily.csv
 first=1
 : > "$out"
 shopt -s nullglob
-for f in xauusd_macro_gold_pit_daily_????_q?.csv; do
+for f in xauusd_macro_gold_pit_daily_20[0-9][0-9].csv; do
   if [ "$first" -eq 1 ]; then cat "$f" >> "$out"; first=0; else tail -n +2 "$f" >> "$out"; fi
 done
 echo "wrote $out ($(wc -l < "$out") lines)"
