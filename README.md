@@ -9,6 +9,7 @@ OHLCV CSVs under `data/`:
 - `xauusd_m5/`
 - `xauusd_m15/`
 - `xauusd_h1/`
+- `btcusd_m1/`
 
 Format: `timestamp,open,high,low,close` (Unix ms).
 
@@ -25,6 +26,20 @@ python scripts/download_xauusd_m1.py --out data/xauusd_m1 --start 2022-01
 
 Oder GitHub Action **Download XAUUSD M1** (Actions → Run workflow) starten.
 Quelle: Dukascopy BID `candles_min_1` (`datafeed.dukascopy.com`).
+
+### BTCUSD M1 (Dukascopy)
+
+Monatliche Dateien: `data/btcusd_m1/BTCUSD_M1_YYYY_MM.csv`
+Zeitraum: 2022-01 bis 2026-08, BID, M1.
+
+Lokal herunterladen:
+
+```bash
+bash scripts/download_btcusd_m1.sh data/btcusd_m1 2022-01 2026-08
+```
+
+Oder GitHub Action **Download BTCUSD M1** (Actions → Run workflow) starten.
+Quelle: Dukascopy via `dukascopy-node` (`btcusd`, timeframe `m1`, price `bid`).
 
 ## ML Strategy
 
