@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-OUT_DIR = Path("/workspace/415d80d1-e105-410b-896d-38f27e4c9898/sessions/agent_50742d8d-8d25-4388-882c-5c27593ef8ee/data/xauusd_m1")
+OUT_DIR = Path("/workspace/app/data/xauusd_m1")
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36",
     "Accept": "*/*",
